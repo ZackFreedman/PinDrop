@@ -190,7 +190,7 @@ public class PinDropService extends Service {
     		locationListeners.add(listener);
     		mLocationManager.requestSingleUpdate(criteria, listener, null);
 
-    		mLiveCard = new LiveCard(this, LIVE_CARD_TAG);
+    		mLiveCard = new LiveCard(getBaseContext(), LIVE_CARD_TAG);
     		mLiveCard.setViews(new RemoteViews(getPackageName(), R.layout.activity_waiting));
     		mLiveCard.attach(this); // Prevent this Service from being killed to free up memory
 

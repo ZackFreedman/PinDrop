@@ -21,6 +21,7 @@ import android.content.ComponentName;
 import android.content.Intent;
 import android.content.ServiceConnection;
 import android.os.Bundle;
+import android.os.Handler;
 import android.os.IBinder;
 import android.util.Log;
 import android.view.Menu;
@@ -34,11 +35,14 @@ public class MenuActivity extends Activity {
 	// This is technically an Immersion!
 	// Because Services have no UI, we need to open this Activity, which in turn opens its menu!
 	
-	PinDropService.MenuBinder mBinder;
-	
 	private static String TAG = "PinDropMenu";
 	
-	boolean hasLocation;
+	private final Handler mStopThisCrazyThingHandler = new Handler();
+	
+	private PinDropService.MenuBinder mBinder;
+	private boolean hasLocation;
+	private boolean mAttachedToWindow;
+	private boolean mOptionsMenuOpen;
 	
 	/*
 	 * Links this Activity to the Service that spawned it, so the Menu can send and receive information
@@ -51,7 +55,7 @@ public class MenuActivity extends Activity {
 				mBinder = (PinDropService.MenuBinder)service;
 				hasLocation = mBinder.hasLocation();
 				Log.d(TAG, hasLocation ? "Received has location" : "Received no location");
-				//openOptionsMenu();
+				openOptionsMenu(); // Important: This has been overridden.
 			}
 		}
 
@@ -66,9 +70,32 @@ public class MenuActivity extends Activity {
     }
 
     @Override
-    public void onResume() {
-        super.onResume();
-        openOptionsMenu();
+    public void onAttachedToWindow() {
+    	super.onAttachedToWindow();
+    	mAttachedToWindow = true; // Popping the menu before the Activity is attached to Home's Window will throw an exception.
+    	openOptionsMenu(); // Important: This has been overridden.
+    }
+    
+    @Override
+    public void onDetachedFromWindow() {
+    	super.onDetachedFromWindow();
+    	mAttachedToWindow = false;
+    }
+    
+    @Override
+    public void openOptionsMenu() {
+    	/*
+    	 * We need to open the options menu after all this is true:
+    	 * - We've bound this Activity to the Live Card's Service
+    	 * - This Activity has been attached to the Home Window (the one that renders the Timeline)
+    	 * - The options menu isn't already open
+    	 * The problem is that onServiceConnected and onAttachedToWindow may happen out of order. 
+    	 * We need the code to be robust, so we add the conditional below.
+    	 */
+    	if (!mOptionsMenuOpen && mAttachedToWindow && mBinder != null) {
+    		mOptionsMenuOpen = true;
+    		super.openOptionsMenu();
+    	}
     }
 
     @Override
@@ -102,7 +129,14 @@ public class MenuActivity extends Activity {
         		mBinder.addToTimeline(); // TODO: Add Mirror functionality!
         		return true;
             case R.id.stop: // IT IS CRITICALLY IMPORTANT TO ADD THIS OR THE GLASSWARE CAN'T BE KILLED IN USERSPACE!
-                stopService(new Intent(this, PinDropService.class));
+                mStopThisCrazyThingHandler.post(new Runnable() {
+                	// I hate anonymous classes and inlining as much as the next guy,
+                	// but this enables XE19's sexy new animations to work.
+                	// Use this pattern when starting an Activity (Immersion),
+                	// or when stopping a Service that owns a Live Card.
+                	@Override
+                	public void run() {stopService(new Intent(MenuActivity.this, PinDropService.class));}
+                });
                 return true;
             default:
                 return super.onOptionsItemSelected(item);
@@ -111,13 +145,10 @@ public class MenuActivity extends Activity {
 
     @Override
     public void onOptionsMenuClosed(Menu menu) {
-        // Nothing else to do, closing the Activity.
-        finish();
-    }
-    
-    @Override
-    public void onStop() {
-    	super.onStop();
-    	unbindService(mConnection); // Don't leak Services!
+    	super.onOptionsMenuClosed(menu);
+    	mOptionsMenuOpen = false;
+    	unbindService(mConnection); // No leaking Services allowed!
+        
+        finish(); // Calling this here kills the Activity and returns us to the Live Card.
     }
 }
