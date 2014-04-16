@@ -22,13 +22,9 @@ public final class R {
     }
     public static final class drawable {
         public static final int debugmaptile=0x7f020000;
-        public static final int debugmaptile2=0x7f020001;
-        public static final int ic_colon=0x7f020002;
-        public static final int ic_directions_50=0x7f020003;
-        public static final int ic_interpunc=0x7f020004;
-        public static final int ic_lap=0x7f020005;
-        public static final int ic_location_50=0x7f020006;
-        public static final int ic_stop=0x7f020007;
+        public static final int ic_directions_50=0x7f020001;
+        public static final int ic_location_50=0x7f020002;
+        public static final int ic_stop=0x7f020003;
     }
     public static final class id {
         public static final int LinearLayout1=0x7f0a0000;
@@ -53,7 +49,6 @@ public final class R {
         public static final int app_name=0x7f070000;
         public static final int directions=0x7f070003;
         public static final int drop_a_pin=0x7f070001;
-        public static final int hello_world=0x7f070006;
         public static final int stop=0x7f070002;
         public static final int title_activity_waiting=0x7f070004;
     }

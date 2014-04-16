@@ -18,11 +18,10 @@
 <resources>
 
     <string name="app_name">Pin Drop</string>
-    <string name="drop_a_pin">drop a pin here</string>
+    <string name="drop_a_pin">drop a pin</string>
     <string name="stop">Stop</string>
     <string name="directions">Directions</string>
     <string name="title_activity_waiting">WaitingActivity</string>
     <string name="action_settings">Settings</string>
-    <string name="hello_world">Hello world!</string>
 
 </resources>

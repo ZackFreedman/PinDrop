@@ -31,13 +31,18 @@ import android.view.MenuItem;
  * Activity showing the options menu.
  */
 public class MenuActivity extends Activity {
-
+	// This is technically an Immersion!
+	// Because Services have no UI, we need to open this Activity, which in turn opens its menu!
+	
 	PinDropService.MenuBinder mBinder;
 	
 	private static String TAG = "PinDropMenu";
 	
 	boolean hasLocation;
 	
+	/*
+	 * Links this Activity to the Service that spawned it, so the Menu can send and receive information
+	 */
 	private ServiceConnection mConnection = new ServiceConnection() {
 
 		@Override
@@ -46,14 +51,12 @@ public class MenuActivity extends Activity {
 				mBinder = (PinDropService.MenuBinder)service;
 				hasLocation = mBinder.hasLocation();
 				Log.d(TAG, hasLocation ? "Received has location" : "Received no location");
-				openOptionsMenu();
+				//openOptionsMenu();
 			}
 		}
 
 		@Override
-		public void onServiceDisconnected(ComponentName name) {
-			// TODO Auto-generated method stub
-		}
+		public void onServiceDisconnected(ComponentName name) {}
 	};
 	
     @Override
@@ -65,7 +68,7 @@ public class MenuActivity extends Activity {
     @Override
     public void onResume() {
         super.onResume();
-        //openOptionsMenu();
+        openOptionsMenu();
     }
 
     @Override
@@ -96,9 +99,9 @@ public class MenuActivity extends Activity {
         		mBinder.startNavigation();
         		return true;
         	case R.id.remember:
-        		mBinder.spawnStaticCard();
+        		mBinder.addToTimeline(); // TODO: Add Mirror functionality!
         		return true;
-            case R.id.stop:
+            case R.id.stop: // IT IS CRITICALLY IMPORTANT TO ADD THIS OR THE GLASSWARE CAN'T BE KILLED IN USERSPACE!
                 stopService(new Intent(this, PinDropService.class));
                 return true;
             default:
@@ -115,6 +118,6 @@ public class MenuActivity extends Activity {
     @Override
     public void onStop() {
     	super.onStop();
-    	unbindService(mConnection);
+    	unbindService(mConnection); // Don't leak Services!
     }
 }

@@ -1,34 +1,15 @@
-/*
- * Copyright (C) 2013 The Android Open Source Project
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
 
 package com.voidstar.glass.sample.pinDrop;
 
 import java.io.BufferedInputStream;
-import java.io.IOException;
 import java.io.InputStream;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.ExecutionException;
 
-import com.google.android.glass.app.Card;
 import com.google.android.glass.media.Sounds;
 import com.google.android.glass.timeline.LiveCard;
 import com.google.android.glass.timeline.LiveCard.PublishMode;
-import com.google.android.glass.timeline.TimelineManager;
 
 import android.app.PendingIntent;
 import android.app.Service;
@@ -36,9 +17,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
-import android.location.Address;
 import android.location.Criteria;
-import android.location.Geocoder;
 import android.location.Location;
 import android.location.LocationListener;
 import android.location.LocationManager;
@@ -60,7 +39,6 @@ public class PinDropService extends Service {
     private static final String LIVE_CARD_TAG = "pindrop";
 
     private LocationManager mLocationManager;
-    private TimelineManager mTimelineManager;
     private LiveCard mLiveCard;
     
     private List<PinDropLocationListener> locationListeners = new ArrayList<PinDropLocationListener>();
@@ -71,6 +49,10 @@ public class PinDropService extends Service {
     private String coords;
     private boolean hasLocation;
     
+    /*
+     * Specialized LocationListener that obtains a GPS location, extracts its coordinates,
+     * and starts downloading the map tile
+     */
     private class PinDropLocationListener implements LocationListener {
 
 		@Override
@@ -99,6 +81,11 @@ public class PinDropService extends Service {
 		}
     }
 
+    /*
+     * Downloads a map tile from the Google Maps Static API.
+     * This must be wrapped in an AsyncTask because the download takes too long
+     * to run on the UI thread.
+     */
     private class DownloadMapTileTask extends AsyncTask<String, Void, Bitmap> {
     	String savedCoords;
     	
@@ -151,13 +138,17 @@ public class PinDropService extends Service {
 		}
     }
 
+    /*
+     * Attaches the MenuActivity to the Live Card so its MenuItems can kill the app or start navigation.
+     * Also allows the Get Directions entry to be hidden while the location loads. 
+     */
     public class MenuBinder extends Binder {
     	public void startNavigation() {
     		Log.d(TAG, "Starting navigation");
 
     		Intent intent = new Intent(Intent.ACTION_VIEW);
     		intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-    		intent.setData(Uri.parse("google.navigation:q=" + coords));
+    		intent.setData(Uri.parse("google.navigation:q=" + coords)); // Special URI is handled by the "Get Directions To" app
     		startActivity(intent);
     	}
 
@@ -165,25 +156,30 @@ public class PinDropService extends Service {
     		return hasLocation;
     	}
 
-		public void spawnStaticCard() {
-			// todo next
+		public void addToTimeline() {
+			// TODO: Use the Mirror API to add a Card to the Timeline so the user can drop a pin and return to it later
 		}
     }
 
     @Override
     public void onCreate() {
+    	// This runs when the Service is first created.
+    	// If you launch the Glassware and the Live Card isn't visible, this is called before onStartCommand.
+    	// If you launch the Glassware and the Live Card is visible, onStartCommand will be immediately called.
     	super.onCreate();
     	mLocationManager = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
-    	mTimelineManager = TimelineManager.from(this);
     }
 
     @Override
     public IBinder onBind(Intent intent) {
+    	// When a MenuActivity is created, its code will bind it to the instance of this service.
+    	// This method allows it to collect the MenuBinder that lets it affect this Service.
     	return mBinder;
     }
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {  	
+    	// This method is called whenever the Glassware is invoked via voice commands or the OK Glass menu.
     	if (mLiveCard == null) { 	
     		Log.d(TAG, "Connecting mLocationManager");
 
@@ -194,39 +190,39 @@ public class PinDropService extends Service {
     		locationListeners.add(listener);
     		mLocationManager.requestSingleUpdate(criteria, listener, null);
 
-    		Log.d(TAG, "Publishing LiveCard");
-    		mLiveCard = mTimelineManager.createLiveCard(LIVE_CARD_TAG);
-
-    		// Keep track of the callback to remove it before unpublishing.
+    		mLiveCard = new LiveCard(this, LIVE_CARD_TAG);
     		mLiveCard.setViews(new RemoteViews(getPackageName(), R.layout.activity_waiting));
+    		mLiveCard.attach(this); // Prevent this Service from being killed to free up memory
 
-    		Intent menuIntent = new Intent(this, MenuActivity.class);
+    		Intent menuIntent = new Intent(this, MenuActivity.class); // Since menus can only be attached to Activities, we create an activity to own and launch the menu.
     		menuIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
-    		mLiveCard.setAction(PendingIntent.getActivity(this, 0, menuIntent, 0));
+    		mLiveCard.setAction(PendingIntent.getActivity(this, 0, menuIntent, 0)); // This Intent will be fired whenever the LiveCard is tapped.
 
-    		mLiveCard.publish(PublishMode.REVEAL);
+    		Log.d(TAG, "Publishing LiveCard");
+    		mLiveCard.publish(PublishMode.REVEAL); // Add the LiveCard to the Timeline and switch to it
     		Log.d(TAG, "Done publishing LiveCard");
-
-    		//hasPlayedSfx = false;
     	} else {
-    		// TODO(alainv): Jump to the LiveCard when API is available.
+    		mLiveCard.navigate(); // Switch to the app if it's already running
     	}
 
-    	return START_STICKY;
+    	return START_STICKY; // No idea what this does. Your guess is as good as mine.
     }
 
     @Override
     public void onDestroy() {
-    	clearAsyncs();
+    	clearAsyncs(); // Kill other threads to prevent leakage
 
     	if (mLiveCard != null && mLiveCard.isPublished()) {
     		Log.d(TAG, "Unpublishing LiveCard");
-    		mLiveCard.unpublish();
-    		mLiveCard = null;
+    		mLiveCard.unpublish(); // Buh-bye, LiveCard! It will live out the rest of its days in a LiveCard retirement home.
+    		mLiveCard = null; // Never mind, the garbage collector ate it
     	}
     	super.onDestroy();
     }
 
+    /*
+     * Kills other threads to prevent leakage
+     */
     private void clearAsyncs() {
     	for (PinDropLocationListener listener : locationListeners) {
     		mLocationManager.removeUpdates(listener);
